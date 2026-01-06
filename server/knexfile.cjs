@@ -113,7 +113,7 @@ const appConfig = {
   connection: {
     host: process.env.DB_HOST,
     port: process.env.DB_PORT,
-    user: process.env.DB_USER_SERVER || 'app_user',
+    user: process.env.DB_USER_SERVER, // Changed to rely solely on env var
     password: getSecret('db_password_server', 'DB_PASSWORD_SERVER'),
     database: process.env.DB_NAME_SERVER,
   },

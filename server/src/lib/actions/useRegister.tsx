@@ -243,7 +243,7 @@ export async function registerUser({ username, email, password, clientName }: IU
   } else {
     try {
       const db = await getAdminConnection();
-      await Tenant.insert(db, {
+      const createdTenant = await Tenant.insert(db, {
         client_name: clientName,
         email: email.toLowerCase(),
         created_at: new Date(),
@@ -256,7 +256,7 @@ export async function registerUser({ username, email, password, clientName }: IU
         msp: true,
         client: false
       };
-      const newUser: Omit<IUserWithRoles, 'tenant'> = {        
+      const newUser: Omit<IUserWithRoles, 'tenant'> & { tenant: string } = {        
         user_id: uuidv4(),
         username: username.toLowerCase(),
         email: email.toLowerCase(),
@@ -264,7 +264,8 @@ export async function registerUser({ username, email, password, clientName }: IU
         created_at: new Date(),
         roles: [superadminRole],
         is_inactive: false,
-        user_type: 'internal'
+        user_type: 'internal',
+        tenant: createdTenant.tenant
       };
       await User.insert(db, newUser);
       

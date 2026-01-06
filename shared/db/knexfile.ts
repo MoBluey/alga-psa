@@ -14,7 +14,7 @@ if (typeof process !== 'undefined' && process.env?.NODE_ENV === 'test') {
     if (result.parsed?.DB_NAME_SERVER) {
       (process.env as any).DB_NAME_SERVER = result.parsed.DB_NAME_SERVER;
     }
-  } catch {}
+  } catch { }
 }
 
 setTypeParser(20, parseFloat);
@@ -102,7 +102,7 @@ const baseConfig: Record<string, CustomKnexConfig> = {
     connection: {
       host: (typeof process !== 'undefined' && process.env?.DB_HOST) || 'localhost',
       port: Number((typeof process !== 'undefined' && process.env?.DB_PORT) || 5432),
-      user: 'app_user',
+      user: (typeof process !== 'undefined' && process.env?.DB_USER_SERVER) || 'app_user',
       password: await getDbPassword(),
       database: (typeof process !== 'undefined' && process.env?.DB_NAME_SERVER) || 'server'
     },

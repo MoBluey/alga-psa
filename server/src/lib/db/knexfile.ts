@@ -4,8 +4,8 @@ import dotenv from 'dotenv';
 import fs from 'fs';
 import path from 'path';
 import process
- from 'process';
- import { validate as uuidValidate } from 'uuid';
+  from 'process';
+import { validate as uuidValidate } from 'uuid';
 
 type Function = (err: Error | null, connection: Knex.Client) => void;
 
@@ -81,7 +81,7 @@ const baseConfig: Record<string, CustomKnexConfig> = {
     connection: {
       host: process.env.DB_HOST || 'localhost',
       port: Number(process.env.DB_PORT) || 5432,
-      user: 'app_user',
+      user: (typeof process !== 'undefined' && process.env?.DB_USER_SERVER) || 'app_user',
       password: getDbPassword,
       database: process.env.DB_NAME_SERVER || 'server'
     },
@@ -131,7 +131,7 @@ export const getKnexConfigWithTenant = async (tenant: string): Promise<CustomKne
 
   const env = process.env.APP_ENV || 'development';
   const config = await getKnexConfig(env);
-  
+
   return {
     ...config,
     asyncStackTraces: true,
