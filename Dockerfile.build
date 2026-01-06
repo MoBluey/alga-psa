@@ -64,7 +64,7 @@ WORKDIR /app/server
 RUN npm install
 
 # Increase Node.js memory limit for the build process
-ENV NODE_OPTIONS="--max-old-space-size=8192"
+ENV NODE_OPTIONS="--max-old-space-size=2048"
 
 # Set edition to community for proper module resolution
 ENV EDITION="ce"
