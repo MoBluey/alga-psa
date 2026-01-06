@@ -113,6 +113,8 @@ services:
       - "${EXPOSE_DB_PORT:-5432}:5432"
     networks:
       - app-network
+    volumes:
+      - postgres-data:/var/lib/postgresql/data
 
   redis: # Renamed from redis-base
     build:
@@ -145,3 +147,7 @@ services:
 networks:
   app-network:
     driver: bridge
+
+volumes:
+  postgres-data:
+  files-data:

@@ -12,6 +12,8 @@ services:
     build:
       context: .
       dockerfile: Dockerfile.build
+    volumes:
+      - files-data:/data/files
 
   setup:
     environment:
@@ -28,3 +30,7 @@ services:
       # Production secret provider configuration for hocuspocus
       SECRET_READ_CHAIN: ${SECRET_READ_CHAIN:-env,filesystem,vault}
       SECRET_WRITE_PROVIDER: ${SECRET_WRITE_PROVIDER:-filesystem}
+
+volumes:
+  postgres-data:
+  files-data:
