@@ -1,0 +1,292 @@
+version: '3.8'
+
+x-environment: &shared-environment
+  # ---- APP -------
+  VERSION: ${VERSION}
+  APP_NAME: ${APP_NAME}
+  APP_ENV: ${APP_ENV:-production}
+  NODE_ENV: ${NODE_ENV:-production}
+  HOST: ${HOST}
+  VERIFY_EMAIL_ENABLED: ${VERIFY_EMAIL_ENABLED:-false}
+
+  # ---- REDIS ----
+  REDIS_HOST: ${REDIS_HOST:-redis}
+  REDIS_PORT: ${REDIS_PORT:-6379}
+
+  # ---- PGBOUNCER ----
+  PGBOUNCER_HOST: ${PGBOUNCER_HOST:-pgbouncer}
+  PGBOUNCER_PORT: ${PGBOUNCER_PORT:-6432}
+  EXPOSE_PGBOUNCER_PORT: ${EXPOSE_PGBOUNCER_PORT:-6432}
+
+  # ---- DATABASE ----
+  DB_TYPE: ${DB_TYPE:-postgres}
+  DB_HOST: postgres
+  DB_PORT: ${DB_PORT:-5432}
+  DB_NAME_SERVER: server
+  DB_USER_SERVER: app_user
+  POSTGRES_USER: postgres
+
+  # ---- LOGGING ----
+  LOG_LEVEL: ${LOG_LEVEL:-INFO}
+  LOG_IS_FORMAT_JSON: ${LOG_IS_FORMAT_JSON:-false}
+  LOG_IS_FULL_DETAILS: ${LOG_IS_FULL_DETAILS:-false}
+  LOG_ENABLED_FILE_LOGGING: ${LOG_ENABLED_FILE_LOGGING}
+  LOG_DIR_PATH: ${LOG_DIR_PATH}
+  LOG_ENABLED_EXTERNAL_LOGGING: ${LOG_ENABLED_EXTERNAL_LOGGING}
+  LOG_EXTERNAL_HTTP_HOST: ${LOG_EXTERNAL_HTTP_HOST}
+  LOG_EXTERNAL_HTTP_PORT: ${LOG_EXTERNAL_HTTP_PORT}
+  LOG_EXTERNAL_HTTP_PATH: ${LOG_EXTERNAL_HTTP_PATH}
+  LOG_EXTERNAL_HTTP_LEVEL: ${LOG_EXTERNAL_HTTP_LEVEL}
+  LOG_EXTERNAL_HTTP_TOKEN: ${LOG_EXTERNAL_HTTP_TOKEN}
+
+  # ---- HOCUSPOCUS ----
+  HOCUSPOCUS_PORT: ${HOCUSPOCUS_PORT:-1234}
+  HOCUSPOCUS_URL: ${HOCUSPOCUS_URL}
+
+  # ---- EMAIL ----
+  EMAIL_ENABLE: ${EMAIL_ENABLE:-false}
+  EMAIL_FROM: ${EMAIL_FROM:-noreply@example.com}
+  EMAIL_HOST: ${EMAIL_HOST}
+  EMAIL_PORT: ${EMAIL_PORT:-587}
+  EMAIL_USERNAME: ${EMAIL_USERNAME:-noreply@example.com}
+
+  # ---- CRYPTO ----
+  CRYPTO_SALT_BYTES: ${SALT_BYTES}
+  CRYPTO_ITERATION: ${ITERATION}
+  CRYPTO_KEY_LENGTH: ${KEY_LENGTH}
+  CRYPTO_ALGORITHM: ${ALGORITHM}
+
+  # ---- TOKEN ----
+  TOKEN_EXPIRES: ${TOKEN_EXPIRES}
+
+  # ---- AUTH ----
+  NEXTAUTH_URL: ${NEXTAUTH_URL:-http://localhost:3000}
+  NEXTAUTH_SECRET: ${NEXTAUTH_SECRET}
+  NEXTAUTH_SESSION_EXPIRES: ${NEXTAUTH_SESSION_EXPIRES:-86400}
+
+  # ---- DEPLOY INFO  ----
+  PROJECT_NAME: ${PROJECT_NAME}
+  EXPOSE_DB_PORT: ${EXPOSE_DB_PORT:-5432}
+  EXPOSE_HOCUSPOCUS_PORT: ${EXPOSE_HOCUSPOCUS_PORT:-1234}
+  EXPOSE_REDIS_PORT: ${EXPOSE_REDIS_PORT:-6379}
+  EXPOSE_SERVER_PORT: ${EXPOSE_SERVER_PORT:-3000}
+
+secrets:
+  db_password_server:
+    file: ./secrets/db_password_server
+  db_password_hocuspocus:
+    file: ./secrets/db_password_hocuspocus
+  postgres_password:
+    file: ./secrets/postgres_password
+  redis_password:
+    file: ./secrets/redis_password
+  email_password:
+    file: ./secrets/email_password
+  crypto_key:
+    file: ./secrets/crypto_key
+  token_secret_key:
+    file: ./secrets/token_secret_key
+  nextauth_secret:
+    file: ./secrets/nextauth_secret
+  google_oauth_client_id:
+    file: ./secrets/google_oauth_client_id
+  google_oauth_client_secret:
+    file: ./secrets/google_oauth_client_secret
+  alga_auth_key:
+    file: ./secrets/alga_auth_key
+  ninjaone_client_id:
+    file: ./secrets/ninjaone_client_id
+  ninjaone_client_secret:
+    file: ./secrets/ninjaone_client_secret
+
+services:
+  postgres:
+    image: ankane/pgvector:latest
+    command: postgres -c password_encryption=md5
+    environment:
+      <<: *shared-environment
+      POSTGRES_PASSWORD_FILE: /run/secrets/postgres_password
+      POSTGRES_INITDB_ARGS: "--auth-host=md5 --auth-local=md5"
+      POSTGRES_DB: server
+    secrets:
+      - postgres_password
+    ports:
+      - "${EXPOSE_DB_PORT:-5432}:5432"
+    networks:
+      - app-network
+    volumes:
+      - postgres-data:/var/lib/postgresql/data
+
+  redis:
+    build:
+      context: .
+      dockerfile: redis/Dockerfile
+    environment:
+      <<: *shared-environment
+    ports:
+      - '${EXPOSE_REDIS_PORT:-6379}:6379'
+    secrets:
+      - redis_password
+    networks:
+      - app-network
+    volumes:
+      - redis-data:/data
+
+  pgbouncer:
+    build:
+      context: ./pgbouncer
+      dockerfile: Dockerfile
+    environment:
+      <<: *shared-environment
+      POSTGRES_USER: postgres
+    secrets:
+      - postgres_password
+      - db_password_server
+    ports:
+      - "${EXPOSE_PGBOUNCER_PORT:-6432}:6432"
+    networks:
+      - app-network
+    depends_on:
+      postgres:
+        condition: service_started
+
+  server:
+    image: ghcr.io/nine-minds/alga-psa-server:v0.15.0
+    platform: linux/amd64
+    container_name: ${APP_NAME:-sebastian}_server
+    environment:
+      <<: *shared-environment
+      EDITION: community
+      DB_NAME: server
+      PGBOSS_DATABASE: server
+      DB_HOST: ${PGBOUNCER_HOST:-pgbouncer}
+      DB_PORT: ${PGBOUNCER_PORT:-6432}
+      DB_USER_ADMIN: ${DB_USER_ADMIN:-postgres}
+      REQUIRE_HOCUSPOCUS: ${REQUIRE_HOCUSPOCUS:-false}
+      # Production secret provider configuration
+      SECRET_READ_CHAIN: ${SECRET_READ_CHAIN:-env,filesystem,vault}
+      SECRET_WRITE_PROVIDER: ${SECRET_WRITE_PROVIDER:-filesystem}
+      # Workflow configuration
+      WORKFLOW_DISTRIBUTED_MODE: "true"
+      WORKFLOW_REDIS_STREAM_PREFIX: "workflow:events:"
+      WORKFLOW_REDIS_CONSUMER_GROUP: "workflow-workers"
+    ports:
+      - "${EXPOSE_SERVER_PORT:-3000}:3000"
+    volumes:
+      - files-data:/data/files
+      - type: bind
+        source: ./secrets/db_password_server
+        target: /run/secrets/db_password_server
+        read_only: true
+    entrypoint: ["/bin/sh", "-c", "export DATABASE_URL=postgresql://app_user:$$(cat /run/secrets/db_password_server)@${PGBOUNCER_HOST:-pgbouncer}:${PGBOUNCER_PORT:-6432}/server && /app/entrypoint.sh"]
+    secrets:
+      - postgres_password
+      - db_password_server
+      - db_password_hocuspocus
+      - redis_password
+      - email_password
+      - crypto_key
+      - token_secret_key
+      - nextauth_secret
+      - google_oauth_client_id
+      - google_oauth_client_secret
+      - alga_auth_key
+    networks:
+      - app-network
+    depends_on:
+      postgres:
+        condition: service_started
+      pgbouncer:
+        condition: service_started
+      redis:
+        condition: service_started
+      hocuspocus:
+        condition: service_started
+      setup:
+        condition: service_completed_successfully
+
+  hocuspocus:
+    image: ghcr.io/nine-minds/alga-psa-hocuspocus:v0.15.0
+    platform: linux/amd64
+    container_name: ${APP_NAME:-sebastian}_hocuspocus
+    environment:
+      <<: *shared-environment
+      REDIS_PASSWORD: ${REDIS_PASSWORD}
+      DB_HOST: postgres
+      DB_NAME: ${DB_NAME_HOCUSPOCUS:-server}
+      DB_USER: ${DB_USER_HOCUSPOCUS:-app_user}
+      DB_USER_HOCUSPOCUS: ${DB_USER_HOCUSPOCUS:-app_user}
+      DB_PASSWORD: ${DB_PASSWORD_HOCUSPOCUS}
+      PGDATABASE: ${DB_NAME_HOCUSPOCUS:-server}
+      # Production secret provider configuration
+      SECRET_READ_CHAIN: ${SECRET_READ_CHAIN:-env,filesystem,vault}
+      SECRET_WRITE_PROVIDER: ${SECRET_WRITE_PROVIDER:-filesystem}
+    ports:
+      - "${EXPOSE_HOCUSPOCUS_PORT:-1234}:1234"
+    secrets:
+      - postgres_password
+      - db_password_hocuspocus
+      - redis_password
+    networks:
+      - app-network
+    depends_on:
+      redis:
+        condition: service_started
+
+  setup:
+    image: ghcr.io/nine-minds/alga-psa-server:v0.15.0
+    platform: linux/amd64
+    restart: "no"
+    environment:
+      <<: *shared-environment
+      EDITION: community
+      NODE_OPTIONS: --experimental-vm-modules
+      DB_NAME_SERVER: server
+      DB_USER_SERVER: app_user
+      DB_USER_ADMIN: ${DB_USER_ADMIN:-postgres}
+      PGBOSS_DATABASE: server
+      DB_HOST: ${PGBOUNCER_HOST:-pgbouncer}
+      DB_PORT: ${PGBOUNCER_PORT:-6432}
+      # Ensure admin operations talk directly to Postgres
+      DB_HOST_ADMIN: ${DB_HOST_ADMIN:-postgres}
+      DB_PORT_ADMIN: ${DB_PORT_ADMIN:-5432}
+      # Production secret provider configuration
+      SECRET_READ_CHAIN: ${SECRET_READ_CHAIN:-env,filesystem,vault}
+      SECRET_WRITE_PROVIDER: ${SECRET_WRITE_PROVIDER:-filesystem}
+    volumes:
+      - type: bind
+        source: ./setup/config.ini
+        target: /app/setup/config.ini
+        read_only: true
+      - type: bind
+        source: ./setup/entrypoint.sh
+        target: /app/setup/entrypoint.sh
+        read_only: true
+      - type: bind
+        source: ./secrets/postgres_password
+        target: /run/secrets/postgres_password
+        read_only: true
+      - type: bind
+        source: ./secrets/db_password_server
+        target: /run/secrets/db_password_server
+        read_only: true
+    secrets:
+      - postgres_password
+      - db_password_server
+    networks:
+      - app-network
+    depends_on:
+      postgres:
+        condition: service_started
+      pgbouncer:
+        condition: service_started
+    entrypoint: ["/app/setup/entrypoint.sh"]
+
+networks:
+  app-network:
+    driver: bridge
+
+volumes:
+  postgres-data:
+  redis-data:
+  files-data:
