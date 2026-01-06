@@ -63,8 +63,9 @@ RUN npm run build
 WORKDIR /app/server
 RUN npm install
 
-# Increase Node.js memory limit for the build process
-ENV NODE_OPTIONS="--max-old-space-size=2048"
+# Increase Node.js memory limit for the build process (1.5GB for safer overhead)
+ENV NODE_OPTIONS="--max-old-space-size=1536"
+ENV NEXT_TELEMETRY_DISABLED 1
 
 # Set edition to community for proper module resolution
 ENV EDITION="ce"
