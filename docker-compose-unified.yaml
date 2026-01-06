@@ -1,0 +1,171 @@
+version: '3.8'
+
+services:
+  # --- APP SERVICE ---
+  app:
+    # Use Build from Source logic to leverage our fixes
+    build:
+      context: .
+      dockerfile: Dockerfile.build
+    environment:
+      # Core Config
+      - 'APP_NAME=Alga PSA'
+      - APP_ENV=production
+      - NODE_ENV=production
+      - DB_TYPE=postgres
+      - LOG_LEVEL=INFO
+      - HOST=0.0.0.0
+      
+      # Authentication
+      - 'NEXTAUTH_URL=https://psa.p2pit.com.au' # Coolify will likely override or use this
+      - 'NEXTAUTH_SECRET=${NEXTAUTH_SECRET}'
+      - NEXTAUTH_SESSION_EXPIRES=3600
+      - 'ALGA_AUTH_KEY=${ALGA_AUTH_KEY}'
+      - 'CRYPTO_KEY=${CRYPTO_KEY}'
+      
+      # Database - Application Connection
+      # Now using standard app_user thanks to our code fix
+      - DB_HOST=postgres
+      - DB_PORT=5432
+      - DB_NAME_SERVER=server
+      - DB_USER_SERVER=app_user
+      - 'DB_PASSWORD_SERVER=${DB_PASSWORD_SERVER}'
+      
+      # Database - Admin Connection (for migrations/setup if needed by app)
+      - DB_USER_ADMIN=postgres
+      - 'DB_PASSWORD_ADMIN=${POSTGRES_PASSWORD}'
+      
+      # Redis & Hocuspocus
+      - REDIS_HOST=redis
+      - 'REDIS_PASSWORD=${REDIS_PASSWORD}'
+      - DB_NAME_HOCUSPOCUS=hocuspocus
+      - DB_USER_HOCUSPOCUS=app_user
+      - 'DB_PASSWORD_HOCUSPOCUS=${DB_PASSWORD_SERVER}'
+      
+      # Enterprise / SSO Configuration
+      - NEXT_PUBLIC_EDITION=${NEXT_PUBLIC_EDITION:-enterprise}
+      # SSO Secrets (ensure these are set in Coolify environment variables)
+      - GOOGLE_OAUTH_CLIENT_ID=${GOOGLE_OAUTH_CLIENT_ID}
+      - GOOGLE_OAUTH_CLIENT_SECRET=${GOOGLE_OAUTH_CLIENT_SECRET}
+      - MICROSOFT_OAUTH_CLIENT_ID=${MICROSOFT_OAUTH_CLIENT_ID}
+      - MICROSOFT_OAUTH_CLIENT_SECRET=${MICROSOFT_OAUTH_CLIENT_SECRET}
+      - MICROSOFT_OAUTH_TENANT_ID=${MICROSOFT_OAUTH_TENANT_ID}
+      
+      # Email (Disabled by default as requested, enable if SMTP credentials provided)
+      - EMAIL_ENABLE=${EMAIL_ENABLE:-false}
+      - EMAIL_FROM=${EMAIL_FROM:-noreply@p2pit.com.au}
+      - EMAIL_HOST=${EMAIL_HOST:-localhost}
+      - EMAIL_PORT=${EMAIL_PORT:-587}
+      - EMAIL_USERNAME=${EMAIL_USERNAME:-dummy}
+      - EMAIL_PASSWORD=${EMAIL_PASSWORD:-dummy}
+      
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      migrator:
+        condition: service_completed_successfully
+        
+    healthcheck:
+      test:
+        - CMD-SHELL
+        - 'wget --no-verbose --tries=1 --spider http://localhost:3000/api/auth/session || exit 1'
+      interval: 20s
+      timeout: 10s
+      retries: 5
+      start_period: 90s
+    ports:
+      - '3000:3000'
+
+  # --- MIGRATOR SERVICE ---
+  # Runs database migrations before app starts
+  migrator:
+    build:
+      context: .
+      dockerfile: Dockerfile.build
+    restart: "no"
+    entrypoint: ["/bin/sh", "-c"]
+    # We still run as postgres superuser for migrations to be safe
+    command: 
+      - "echo 'Running migrations...' && cd /app/server && npx knex migrate:latest --knexfile knexfile.cjs && echo 'Migrations done'"
+    environment:
+      - DB_HOST=postgres
+      - DB_PORT=5432
+      - DB_NAME_SERVER=server
+      - DB_USER_ADMIN=postgres
+      - 'DB_PASSWORD_ADMIN=${POSTGRES_PASSWORD}'
+      # Force migration to run as admin/postgres user
+      - DB_USER_SERVER=postgres
+      - 'DB_PASSWORD_SERVER=${POSTGRES_PASSWORD}'
+      - APP_ENV=production
+      - NODE_ENV=production
+    depends_on:
+      postgres:
+        condition: service_healthy
+      init-db:
+        condition: service_completed_successfully
+
+  # --- POSTGRES DATABASE ---
+  postgres:
+    image: 'postgres:15-alpine'
+    environment:
+      - POSTGRES_USER=postgres
+      - 'POSTGRES_PASSWORD=${POSTGRES_PASSWORD}'
+      - POSTGRES_DB=server
+    volumes:
+      - 'postgres-data-fresh-v2:/var/lib/postgresql/data'
+    healthcheck:
+      test:
+        - CMD-SHELL
+        - 'pg_isready -U postgres -d server'
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # --- INIT-DB SIDECAR ---
+  # Ensures app_user and databases exist before migrator runs
+  init-db:
+    image: 'postgres:15-alpine'
+    restart: "no"
+    depends_on:
+      postgres:
+        condition: service_healthy
+    environment:
+      - PGHOST=postgres
+      - PGUSER=postgres
+      - 'PGPASSWORD=${POSTGRES_PASSWORD}'
+      - 'APP_USER=app_user'
+      - 'APP_PASS=${DB_PASSWORD_SERVER}'
+    command: >
+      sh -c "
+      echo 'Waiting for postgres...' &&
+      until pg_isready; do sleep 2; done &&
+      echo 'Postgres is ready. Starting setup...' &&
+      psql -d server -c \"CREATE ROLE $$APP_USER WITH LOGIN PASSWORD '$$APP_PASS';\" || echo 'User likely already exists' &&
+      psql -d server -c \"ALTER ROLE $$APP_USER WITH PASSWORD '$$APP_PASS';\" &&
+      psql -d server -c \"GRANT ALL PRIVILEGES ON DATABASE server TO $$APP_USER;\" &&
+      psql -d server -c \"GRANT ALL ON SCHEMA public TO $$APP_USER;\" &&
+      echo 'Database initialization complete.'
+      "
+
+  # --- REDIS ---
+  redis:
+    image: 'redis:7-alpine'
+    command: 'redis-server --requirepass ${REDIS_PASSWORD}'
+    volumes:
+      - 'redis-data:/data'
+    healthcheck:
+      test:
+        - CMD
+        - redis-cli
+        - '-a'
+        - '${REDIS_PASSWORD}'
+        - ping
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+volumes:
+  postgres-data-fresh-v2: null
+  redis-data: null
