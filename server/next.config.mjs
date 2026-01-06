@@ -234,11 +234,6 @@ const nextConfig = {
     // your project has ESLint errors.
     ignoreDuringBuilds: true,
   },
-  typescript: {
-    // Danger: This disables type checking during the build process to save memory
-    // and prevent OOM on 2GB VPS instances. Types should be checked in CI/locally.
-    ignoreBuildErrors: true,
-  },
   reactStrictMode: false, // Disabled to prevent double rendering in development
   transpilePackages: [
     '@blocknote/core',
