@@ -171,7 +171,10 @@ services:
       - app-network
 
   server:
-    image: ghcr.io/nine-minds/alga-psa-server:v0.15.0
+    build:
+      context: .
+      dockerfile: server/Dockerfile
+    image: alga-psa-server:local
     platform: linux/amd64
     container_name: ${APP_NAME:-sebastian}_server
     environment:
@@ -216,7 +219,10 @@ services:
       - app-network
 
   hocuspocus:
-    image: ghcr.io/nine-minds/alga-psa-hocuspocus:v0.15.0
+    build:
+      context: .
+      dockerfile: hocuspocus/Dockerfile
+    image: alga-psa-hocuspocus:local
     platform: linux/amd64
     container_name: ${APP_NAME:-sebastian}_hocuspocus
     environment:
@@ -240,7 +246,10 @@ services:
       - app-network
 
   setup:
-    image: ghcr.io/nine-minds/alga-psa-server:v0.15.0
+    build:
+      context: .
+      dockerfile: server/Dockerfile
+    image: alga-psa-setup:local
     platform: linux/amd64
     restart: "no"
     environment:
