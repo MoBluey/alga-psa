@@ -9,38 +9,38 @@ services:
       dockerfile: Dockerfile.build
     environment:
       # Core Config
-      - 'APP_NAME=Alga PSA'
-      - APP_ENV=production
-      - NODE_ENV=production
-      - DB_TYPE=postgres
-      - LOG_LEVEL=INFO
-      - HOST=0.0.0.0
+      - APP_NAME=${APP_NAME:-Alga PSA}
+      - APP_ENV=${APP_ENV:-production}
+      - NODE_ENV=${APP_ENV:-production}
+      - DB_TYPE=${DB_TYPE:-postgres}
+      - LOG_LEVEL=${LOG_LEVEL:-INFO}
+      - HOST=${HOST:-0.0.0.0}
       
       # Authentication
-      - 'NEXTAUTH_URL=https://psa.p2pit.com.au' # Coolify will likely override or use this
-      - 'NEXTAUTH_SECRET=${NEXTAUTH_SECRET}'
-      - NEXTAUTH_SESSION_EXPIRES=3600
-      - 'ALGA_AUTH_KEY=${ALGA_AUTH_KEY}'
-      - 'CRYPTO_KEY=${CRYPTO_KEY}'
+      - NEXTAUTH_URL=${NEXTAUTH_URL:-http://localhost:3000}
+      - NEXTAUTH_SECRET=${NEXTAUTH_SECRET}
+      - NEXTAUTH_SESSION_EXPIRES=${NEXTAUTH_SESSION_EXPIRES:-3600}
+      - ALGA_AUTH_KEY=${ALGA_AUTH_KEY}
+      - CRYPTO_KEY=${CRYPTO_KEY}
       
       # Database - Application Connection
       # Now using standard app_user thanks to our code fix
-      - DB_HOST=postgres
-      - DB_PORT=5432
-      - DB_NAME_SERVER=server
-      - DB_USER_SERVER=app_user
-      - 'DB_PASSWORD_SERVER=${DB_PASSWORD_SERVER}'
+      - DB_HOST=${DB_HOST:-postgres}
+      - DB_PORT=${DB_PORT:-5432}
+      - DB_NAME_SERVER=${DB_NAME_SERVER:-server}
+      - DB_USER_SERVER=${DB_USER_SERVER:-app_user}
+      - DB_PASSWORD_SERVER=${DB_PASSWORD_SERVER}
       
       # Database - Admin Connection (for migrations/setup if needed by app)
-      - DB_USER_ADMIN=postgres
-      - 'DB_PASSWORD_ADMIN=${POSTGRES_PASSWORD}'
+      - DB_USER_ADMIN=${DB_USER_ADMIN:-postgres}
+      - DB_PASSWORD_ADMIN=${POSTGRES_PASSWORD}
       
       # Redis & Hocuspocus
-      - REDIS_HOST=redis
-      - 'REDIS_PASSWORD=${REDIS_PASSWORD}'
-      - DB_NAME_HOCUSPOCUS=hocuspocus
-      - DB_USER_HOCUSPOCUS=app_user
-      - 'DB_PASSWORD_HOCUSPOCUS=${DB_PASSWORD_SERVER}'
+      - REDIS_HOST=${REDIS_HOST:-redis}
+      - REDIS_PASSWORD=${REDIS_PASSWORD}
+      - DB_NAME_HOCUSPOCUS=${DB_NAME_HOCUSPOCUS:-hocuspocus}
+      - DB_USER_HOCUSPOCUS=${DB_USER_HOCUSPOCUS:-app_user}
+      - DB_PASSWORD_HOCUSPOCUS=${DB_PASSWORD_SERVER}
       
       # Enterprise / SSO Configuration
       - NEXT_PUBLIC_EDITION=${NEXT_PUBLIC_EDITION:-enterprise}
@@ -51,7 +51,7 @@ services:
       - MICROSOFT_OAUTH_CLIENT_SECRET=${MICROSOFT_OAUTH_CLIENT_SECRET}
       - MICROSOFT_OAUTH_TENANT_ID=${MICROSOFT_OAUTH_TENANT_ID}
       
-      # Email (Disabled by default as requested, enable if SMTP credentials provided)
+      # Email
       - EMAIL_ENABLE=${EMAIL_ENABLE:-false}
       - EMAIL_FROM=${EMAIL_FROM:-noreply@p2pit.com.au}
       - EMAIL_HOST=${EMAIL_HOST:-localhost}
@@ -76,7 +76,7 @@ services:
       retries: 5
       start_period: 90s
     ports:
-      - '3000:3000'
+      - '${EXPOSE_SERVER_PORT:-3000}:3000'
 
   # --- MIGRATOR SERVICE ---
   # Runs database migrations before app starts
@@ -90,16 +90,16 @@ services:
     command: 
       - "echo 'Running migrations...' && cd /app/server && npx knex migrate:latest --knexfile knexfile.cjs && echo 'Migrations done'"
     environment:
-      - DB_HOST=postgres
-      - DB_PORT=5432
-      - DB_NAME_SERVER=server
-      - DB_USER_ADMIN=postgres
-      - 'DB_PASSWORD_ADMIN=${POSTGRES_PASSWORD}'
+      - DB_HOST=${DB_HOST:-postgres}
+      - DB_PORT=${DB_PORT:-5432}
+      - DB_NAME_SERVER=${DB_NAME_SERVER:-server}
+      - DB_USER_ADMIN=${DB_USER_ADMIN:-postgres}
+      - DB_PASSWORD_ADMIN=${POSTGRES_PASSWORD}
       # Force migration to run as admin/postgres user
-      - DB_USER_SERVER=postgres
-      - 'DB_PASSWORD_SERVER=${POSTGRES_PASSWORD}'
-      - APP_ENV=production
-      - NODE_ENV=production
+      - DB_USER_SERVER=${DB_USER_ADMIN:-postgres}
+      - DB_PASSWORD_SERVER=${POSTGRES_PASSWORD}
+      - APP_ENV=${APP_ENV:-production}
+      - NODE_ENV=${APP_ENV:-production}
     depends_on:
       postgres:
         condition: service_healthy
@@ -110,15 +110,15 @@ services:
   postgres:
     image: 'postgres:15-alpine'
     environment:
-      - POSTGRES_USER=postgres
-      - 'POSTGRES_PASSWORD=${POSTGRES_PASSWORD}'
-      - POSTGRES_DB=server
+      - POSTGRES_USER=${POSTGRES_USER:-postgres}
+      - POSTGRES_PASSWORD=${POSTGRES_PASSWORD}
+      - POSTGRES_DB=${DB_NAME_SERVER:-server}
     volumes:
       - 'postgres-data-fresh-v2:/var/lib/postgresql/data'
     healthcheck:
       test:
         - CMD-SHELL
-        - 'pg_isready -U postgres -d server'
+        - 'pg_isready -U ${POSTGRES_USER:-postgres} -d ${DB_NAME_SERVER:-server}'
       interval: 10s
       timeout: 5s
       retries: 5
@@ -132,20 +132,20 @@ services:
       postgres:
         condition: service_healthy
     environment:
-      - PGHOST=postgres
-      - PGUSER=postgres
-      - 'PGPASSWORD=${POSTGRES_PASSWORD}'
-      - 'APP_USER=app_user'
-      - 'APP_PASS=${DB_PASSWORD_SERVER}'
+      - PGHOST=${DB_HOST:-postgres}
+      - PGUSER=${POSTGRES_USER:-postgres}
+      - PGPASSWORD=${POSTGRES_PASSWORD}
+      - APP_USER=${DB_USER_SERVER:-app_user}
+      - APP_PASS=${DB_PASSWORD_SERVER}
     command: >
       sh -c "
       echo 'Waiting for postgres...' &&
       until pg_isready; do sleep 2; done &&
       echo 'Postgres is ready. Starting setup...' &&
-      psql -d server -c \"CREATE ROLE $$APP_USER WITH LOGIN PASSWORD '$$APP_PASS';\" || echo 'User likely already exists' &&
-      psql -d server -c \"ALTER ROLE $$APP_USER WITH PASSWORD '$$APP_PASS';\" &&
-      psql -d server -c \"GRANT ALL PRIVILEGES ON DATABASE server TO $$APP_USER;\" &&
-      psql -d server -c \"GRANT ALL ON SCHEMA public TO $$APP_USER;\" &&
+      psql -d ${DB_NAME_SERVER:-server} -c \"CREATE ROLE $$APP_USER WITH LOGIN PASSWORD '$$APP_PASS';\" || echo 'User likely already exists' &&
+      psql -d ${DB_NAME_SERVER:-server} -c \"ALTER ROLE $$APP_USER WITH PASSWORD '$$APP_PASS';\" &&
+      psql -d ${DB_NAME_SERVER:-server} -c \"GRANT ALL PRIVILEGES ON DATABASE ${DB_NAME_SERVER:-server} TO $$APP_USER;\" &&
+      psql -d ${DB_NAME_SERVER:-server} -c \"GRANT ALL ON SCHEMA public TO $$APP_USER;\" &&
       echo 'Database initialization complete.'
       "
 
