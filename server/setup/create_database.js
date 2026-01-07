@@ -331,6 +331,20 @@ async function createDatabase(retryCount = 0) {
     await dbClient.query(`GRANT USAGE ON ALL SEQUENCES IN SCHEMA public TO ${process.env.DB_USER_SERVER}`);
     await dbClient.query(`ALTER DEFAULT PRIVILEGES IN SCHEMA public GRANT USAGE ON SEQUENCES TO ${process.env.DB_USER_SERVER}`);
 
+    // Explicitly grant permissions on 'tenants' table if it exists (fixes "permission denied" issue in Coolify)
+    try {
+      const tenantsCheck = await dbClient.query("SELECT 1 FROM information_schema.tables WHERE table_name = 'tenants' AND table_schema = 'public'");
+      if (tenantsCheck.rows.length > 0) {
+        console.log(`Explicitly granting ALL privileges on public.tenants to ${process.env.DB_USER_SERVER}...`);
+        await dbClient.query(`GRANT ALL PRIVILEGES ON TABLE public.tenants TO ${process.env.DB_USER_SERVER}`);
+        console.log('Granted privileges on tenants table successfully');
+      } else {
+        console.log('Tenants table not found in public schema, skipping explicit grant (it might be created by migrations later)');
+      }
+    } catch (grantError) {
+      console.warn('Warning: Failed to explicitly grant permissions on tenants table:', grantError.message);
+    }
+
     console.log('Database setup completed successfully');
     await dbClient.end();
   } catch (error) {
