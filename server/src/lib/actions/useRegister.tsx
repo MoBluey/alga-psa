@@ -248,6 +248,11 @@ export async function registerUser({ username, email, password, clientName }: IU
         email: email.toLowerCase(),
         created_at: new Date(),
       });
+
+      if (!createdTenant.tenant) {
+        throw new Error('Failed to create tenant: ID is missing');
+      }
+
       const superadminRole: IRoleWithPermissions = {
         role_id: 'superadmin',
         role_name: 'superadmin',
