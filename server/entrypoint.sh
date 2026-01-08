@@ -247,6 +247,26 @@ wait_for_hocuspocus() {
     fi
 }
 
+# Function to run database migrations
+run_migrations() {
+    log "Running database migrations..."
+    
+    # Ensure we are in the server directory where knexfile.cjs resides
+    cd /app/server
+    
+    # Run migrations using the production config (which uses app_user)
+    # This ensures tables are owned by app_user, solving permission issues.
+    if npx knex migrate:latest --knexfile knexfile.cjs; then
+        log "Migrations completed successfully"
+        cd /app # Return to root
+        return 0
+    else
+        log "Error: Migrations failed"
+        cd /app # Return to root
+        return 1
+    fi
+}
+
 # Function to start the application
 start_app() {
     # Set up application database connection using app_user
@@ -304,6 +324,12 @@ main() {
     wait_for_redis
     wait_for_hocuspocus
     
+    # Run database migrations
+    if ! run_migrations; then
+        log "Critical Error: Database migrations failed. Aborting startup."
+        exit 1
+    fi
+
     # Start the application
     start_app
 }
