@@ -132,8 +132,6 @@ validate_environment() {
         "DB_TYPE"
         "DB_USER_ADMIN"
         "LOG_LEVEL"
-        "LOG_IS_FORMAT_JSON"
-        "LOG_IS_FULL_DETAILS"
         "EMAIL_ENABLE"
         "EMAIL_FROM"
         "EMAIL_PORT"
@@ -355,8 +353,8 @@ start_app() {
     ls -la /app/server/ || true
     log "Checking for .next directory:"
     ls -la /app/server/.next/ || log ".next directory not found"
-    log "Checking for dist directory:"
-    ls -la /app/server/dist/ || log "dist directory not found"
+    ls -la /app/server/.next/ || log ".next directory not found"
+
     
     if [ "$NODE_ENV" = "development" ]; then
         log "Starting server in development mode..."

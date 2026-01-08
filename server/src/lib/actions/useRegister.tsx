@@ -243,15 +243,18 @@ export async function registerUser({ username, email, password, clientName }: IU
   } else {
     try {
       const db = await getAdminConnection();
+      const tenantId = uuidv4();
+      logger.info(`Generated Tenant ID for registration: ${tenantId}`);
+
       const createdTenant = await Tenant.insert(db, {
+        tenant: tenantId,
         client_name: clientName,
         email: email.toLowerCase(),
         created_at: new Date(),
       });
 
-      if (!createdTenant.tenant) {
-        throw new Error('Failed to create tenant: ID is missing');
-      }
+      // Ensure we use the explicit ID if return is missing (though we passed it in)
+      const finalTenantId = createdTenant?.tenant || tenantId;
 
       const superadminRole: IRoleWithPermissions = {
         role_id: 'superadmin',
@@ -270,7 +273,7 @@ export async function registerUser({ username, email, password, clientName }: IU
         roles: [superadminRole],
         is_inactive: false,
         user_type: 'internal',
-        tenant: createdTenant.tenant
+        tenant: finalTenantId
       };
       await User.insert(db, newUser);
       
