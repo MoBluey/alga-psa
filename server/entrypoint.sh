@@ -378,6 +378,9 @@ main() {
     wait_for_redis
     wait_for_hocuspocus
     
+    # Fix permissions before migrations
+    fix_permissions
+
     # Run database migrations
     if ! run_migrations; then
         log "Critical Error: Database migrations failed. Aborting startup."
