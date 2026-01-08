@@ -267,6 +267,35 @@ wait_for_hocuspocus() {
     fi
 }
 
+# Function to fix database permissions (self-healing for previous deployments)
+fix_permissions() {
+    log "Attempting to fix database permissions..."
+    
+    # Get admin password (usually postgres)
+    local db_password_admin=$(get_secret "postgres_password" "DB_PASSWORD_ADMIN")
+    
+    if [ -z "$db_password_admin" ]; then
+        log "WARNING: DB_PASSWORD_ADMIN not found. Skipping permission fix."
+        return 0
+    fi
+
+    local admin_user=${DB_USER_ADMIN:-postgres}
+    
+    # Export password for psql
+    export PGPASSWORD="$db_password_admin"
+    
+    # Transfer ownership of knex tables if they exist
+    # This fixes the "relation already exists" error when app_user tries to create tables owned by postgres
+    log "Transferring ownership of knex tables to $DB_USER_SERVER..."
+    psql -h "$DB_HOST" -U "$admin_user" -d "$DB_NAME_SERVER" -c "
+        ALTER TABLE IF EXISTS knex_migrations OWNER TO $DB_USER_SERVER;
+        ALTER TABLE IF EXISTS knex_migrations_lock OWNER TO $DB_USER_SERVER;
+        GRANT ALL ON SCHEMA public TO $DB_USER_SERVER;
+    " || log "Warning: Permission fix command had partial failure (or tables usually don't exist yet)."
+    
+    export PGPASSWORD=""
+}
+
 # Function to run database migrations
 run_migrations() {
     log "Running database migrations..."
