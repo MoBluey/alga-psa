@@ -380,6 +380,7 @@ start_app() {
 
 # Main startup process
 main() {
+    log "DEBUG: Starting entrypoint script (Version: fix-permissions-debug-v1)"
     print_version_banner
     
     # Validate environment
