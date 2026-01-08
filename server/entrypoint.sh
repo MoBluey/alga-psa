@@ -285,12 +285,31 @@ fix_permissions() {
     export PGPASSWORD="$db_password_admin"
     
     # Transfer ownership of knex tables if they exist
-    # This fixes the "relation already exists" error when app_user tries to create tables owned by postgres
-    log "Transferring ownership of knex tables to $DB_USER_SERVER..."
+    # This prevents "relation already exists" errors when app_user tries to use/manage tables owned by postgres
+    log "Transferring ownership of ALL public tables to $DB_USER_SERVER..."
+    
+    # Use a DO block to safely iterate and fix permissions for everything in public schema
+    # This is the "God Mode" fix that ensures app_user owns everything regardless of previous failures
     psql -h "$DB_HOST" -U "$admin_user" -d "$DB_NAME_SERVER" -c "
-        ALTER TABLE IF EXISTS knex_migrations OWNER TO $DB_USER_SERVER;
-        ALTER TABLE IF EXISTS knex_migrations_lock OWNER TO $DB_USER_SERVER;
+    DO \$\$
+    DECLARE
+        r RECORD;
+    BEGIN
+        -- 1. Grant usage on schema (idempotent)
         GRANT ALL ON SCHEMA public TO $DB_USER_SERVER;
+
+        -- 2. Take over ownership of all existing tables (including knex_migrations)
+        FOR r IN (SELECT tablename FROM pg_tables WHERE schemaname = 'public') LOOP
+            EXECUTE 'ALTER TABLE public.' || quote_ident(r.tablename) || ' OWNER TO $DB_USER_SERVER';
+        END LOOP;
+
+        -- 3. Take over ownership of all sequences (for serial IDs)
+        FOR r IN (SELECT sequencename FROM pg_sequences WHERE schemaname = 'public') LOOP
+            EXECUTE 'ALTER SEQUENCE public.' || quote_ident(r.sequencename) || ' OWNER TO $DB_USER_SERVER';
+        END LOOP;
+        
+        RAISE NOTICE 'Permissions fixed successfully for user $DB_USER_SERVER';
+    END \$\$;
     " || log "Warning: Permission fix command had partial failure (or tables usually don't exist yet)."
     
     export PGPASSWORD=""

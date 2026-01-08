@@ -115,8 +115,16 @@ services:
       echo 'Waiting for postgres...' &&
       until pg_isready; do sleep 2; done &&
       echo 'Postgres is ready. Starting setup...' &&
-      psql -d ${DB_NAME_SERVER:-server} -c \"CREATE ROLE $$APP_USER WITH LOGIN PASSWORD '$$APP_PASS';\" || echo 'User likely already exists' &&
-      psql -d ${DB_NAME_SERVER:-server} -c \"ALTER ROLE $$APP_USER WITH PASSWORD '$$APP_PASS';\" &&
+      psql -d ${DB_NAME_SERVER:-server} -c \"
+      DO \$\$
+      BEGIN
+        IF NOT EXISTS (SELECT FROM pg_catalog.pg_roles WHERE rolname = '$$APP_USER') THEN
+          CREATE ROLE $$APP_USER WITH LOGIN PASSWORD '$$APP_PASS';
+        ELSE
+          ALTER ROLE $$APP_USER WITH PASSWORD '$$APP_PASS';
+        END IF;
+      END
+      \$\$;\" &&
       psql -d ${DB_NAME_SERVER:-server} -c \"GRANT ALL PRIVILEGES ON DATABASE ${DB_NAME_SERVER:-server} TO $$APP_USER;\" &&
       psql -d ${DB_NAME_SERVER:-server} -c \"GRANT ALL ON SCHEMA public TO $$APP_USER;\" &&
       echo 'Database initialization complete.'
