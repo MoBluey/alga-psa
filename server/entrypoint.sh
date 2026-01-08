@@ -202,7 +202,27 @@ validate_environment() {
 
 # Function to check if postgres is ready
 wait_for_postgres() {
-    log "Waiting for PostgreSQL to be ready.. (skipped)"
+    log "Waiting for PostgreSQL to be ready..."
+    local db_host="${DB_HOST:-postgres}"
+    local db_port="${DB_PORT:-5432}"
+    local db_user="${DB_USER_ADMIN:-postgres}"
+    local max_attempts=60
+    local attempt=1
+
+    # pg_isready is installed via apk add postgresql-client
+    until pg_isready -h "$db_host" -p "$db_port" -U "$db_user" > /dev/null 2>&1 || [ $attempt -gt $max_attempts ]; do
+        log "PostgreSQL is not ready yet (attempt $attempt/$max_attempts) - sleeping..."
+        sleep 2
+        attempt=$((attempt + 1))
+    done
+
+    if [ $attempt -gt $max_attempts ]; then
+        log "Error: PostgreSQL did not become ready in time"
+        return 1
+    fi
+
+    log "PostgreSQL is ready!"
+    return 0
 }
 
 # Function to check if redis is ready
@@ -256,6 +276,9 @@ run_migrations() {
     
     # Run migrations using the production config (which uses app_user)
     # This ensures tables are owned by app_user, solving permission issues.
+    log "Executing: npx knex migrate:latest --knexfile knexfile.cjs"
+    
+    # We call npx directly. It should find the local knex in node_modules.
     if npx knex migrate:latest --knexfile knexfile.cjs; then
         log "Migrations completed successfully"
         cd /app # Return to root
@@ -320,7 +343,9 @@ main() {
     fi
     
     # Wait for dependencies
-    wait_for_postgres
+    if ! wait_for_postgres; then
+        exit 1
+    fi
     wait_for_redis
     wait_for_hocuspocus
     
