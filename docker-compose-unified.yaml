@@ -115,18 +115,20 @@ services:
       echo 'Waiting for postgres...' &&
       until pg_isready; do sleep 2; done &&
       echo 'Postgres is ready. Starting setup...' &&
-      psql -d ${DB_NAME_SERVER:-server} -c \"
-      DO \$\$
+      echo \"
+      DO \\\$setup\\\$
       BEGIN
         IF NOT EXISTS (SELECT FROM pg_catalog.pg_roles WHERE rolname = '$$APP_USER') THEN
-          CREATE ROLE $$APP_USER WITH LOGIN PASSWORD '$$APP_PASS';
+          CREATE ROLE \\\"$$APP_USER\\\" WITH LOGIN PASSWORD '$$APP_PASS';
         ELSE
-          ALTER ROLE $$APP_USER WITH PASSWORD '$$APP_PASS';
+          ALTER ROLE \\\"$$APP_USER\\\" WITH PASSWORD '$$APP_PASS';
         END IF;
       END
-      \$\$;\" &&
-      psql -d ${DB_NAME_SERVER:-server} -c \"GRANT ALL PRIVILEGES ON DATABASE ${DB_NAME_SERVER:-server} TO $$APP_USER;\" &&
-      psql -d ${DB_NAME_SERVER:-server} -c \"GRANT ALL ON SCHEMA public TO $$APP_USER;\" &&
+      \\\$setup\\\$;
+      GRANT ALL PRIVILEGES ON DATABASE $$DB_NAME_SERVER TO \\\"$$APP_USER\\\";
+      GRANT ALL ON SCHEMA public TO \\\"$$APP_USER\\\";
+      \" > /tmp/init.sql &&
+      psql -d $$DB_NAME_SERVER -f /tmp/init.sql &&
       echo 'Database initialization complete.'
       "
 
