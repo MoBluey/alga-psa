@@ -119,7 +119,7 @@ services:
       - DB_PASSWORD_SERVER=${DB_PASSWORD_SERVER}
       # Required for check_seeds_status
       - NODE_ENV=production
-    command: ["/app/setup/entrypoint.sh"]
+    entrypoint: ["/app/setup/entrypoint.sh"]
 
   # --- REDIS ---
   redis:
