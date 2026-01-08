@@ -110,6 +110,8 @@ RUN apk add --no-cache bash \
 WORKDIR /app
 COPY tsconfig.base.json ./
 COPY server/setup /app/server/setup
+COPY setup /app/setup
+RUN chmod +x /app/setup/entrypoint.sh
 COPY .env.example /app/.env   
 COPY .env.example /app/server/.env  
 

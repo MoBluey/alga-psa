@@ -98,39 +98,28 @@ services:
 
   # --- INIT-DB SIDECAR ---
   # Ensures app_user and databases exist before migrator runs
+  # --- INIT-DB SIDECAR ---
+  # Ensures app_user and databases exist before migrator runs
   init-db:
-    image: 'postgres:15-alpine'
+    build:
+      context: .
+      dockerfile: Dockerfile.build
     restart: "no"
     depends_on:
       postgres:
         condition: service_healthy
     environment:
-      - PGHOST=${DB_HOST:-postgres}
-      - PGUSER=${POSTGRES_USER:-postgres}
-      - PGPASSWORD=${POSTGRES_PASSWORD}
-      - APP_USER=${DB_USER_SERVER:-app_user}
-      - APP_PASS=${DB_PASSWORD_SERVER}
-    command: >
-      sh -c "
-      echo 'Waiting for postgres...' &&
-      until pg_isready; do sleep 2; done &&
-      echo 'Postgres is ready. Starting setup...' &&
-      echo \"
-      DO \\\$setup\\\$
-      BEGIN
-        IF NOT EXISTS (SELECT FROM pg_catalog.pg_roles WHERE rolname = '$$APP_USER') THEN
-          CREATE ROLE \\\"$$APP_USER\\\" WITH LOGIN PASSWORD '$$APP_PASS';
-        ELSE
-          ALTER ROLE \\\"$$APP_USER\\\" WITH PASSWORD '$$APP_PASS';
-        END IF;
-      END
-      \\\$setup\\\$;
-      GRANT ALL PRIVILEGES ON DATABASE $$DB_NAME_SERVER TO \\\"$$APP_USER\\\";
-      GRANT ALL ON SCHEMA public TO \\\"$$APP_USER\\\";
-      \" > /tmp/init.sql &&
-      psql -d $$DB_NAME_SERVER -f /tmp/init.sql &&
-      echo 'Database initialization complete.'
-      "
+      # Connection details for setup script
+      - DB_HOST=${DB_HOST:-postgres}
+      - DB_PORT=${DB_PORT:-5432}
+      - DB_USER_ADMIN=${DB_USER_ADMIN:-postgres}
+      - DB_PASSWORD_ADMIN=${POSTGRES_PASSWORD}
+      - DB_NAME_SERVER=${DB_NAME_SERVER:-server}
+      - DB_USER_SERVER=${DB_USER_SERVER:-app_user}
+      - DB_PASSWORD_SERVER=${DB_PASSWORD_SERVER}
+      # Required for check_seeds_status
+      - NODE_ENV=production
+    command: ["/app/setup/entrypoint.sh"]
 
   # --- REDIS ---
   redis:
