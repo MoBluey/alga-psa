@@ -132,10 +132,13 @@ const User = {
     }
   },
 
-  insert: async (knexOrTrx: Knex | Knex.Transaction, user: Omit<IUserWithRoles, 'tenant'>): Promise<Pick<IUserWithRoles, "user_id">> => {
-    const tenant = await getCurrentTenantId();
+  insert: async (knexOrTrx: Knex | Knex.Transaction, user: Omit<IUserWithRoles, 'tenant'> & { tenant?: string }): Promise<Pick<IUserWithRoles, "user_id">> => {
+    const contextTenant = await getCurrentTenantId();
+    // Use context tenant if available, otherwise allow explicit tenant from input (e.g. for registration)
+    const tenant = contextTenant || user.tenant;
+
     try {
-      logger.info('Inserting user:', user);
+      logger.info('Inserting user:', { ...user, tenant });
       const { roles, ...userData } = user;
 
       if (!roles || roles.length === 0) {
@@ -146,7 +149,7 @@ const User = {
         const [insertedUser] = await trx<IUser>('users').insert({
           ...userData,
           is_inactive: false,
-          tenant: tenant || undefined
+          tenant: tenant
         }).returning('user_id');
 
         const userRoles = roles.map((role: IRole): IUserRoleWithOptionalTenant => {
