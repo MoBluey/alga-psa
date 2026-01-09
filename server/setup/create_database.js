@@ -137,9 +137,9 @@ async function setupHocuspocusDatabase(client, postgresPassword) {
     });
 
     await hocuspocusClient.connect();
-    await hocuspocusClient.query("SET password_encryption = 'md5';");
+    await hocuspocusClient.query("SET password_encryption = 'scram-sha-256';");
     // Ensure PgBouncer (md5 auth) can connect to hocuspocus database by storing md5 hashes
-    await hocuspocusClient.query("SET password_encryption = 'md5';");
+    await hocuspocusClient.query("SET password_encryption = 'scram-sha-256';");
 
     // Check if hocuspocus user exists
     const userCheckResult = await hocuspocusClient.query(
@@ -240,9 +240,9 @@ async function createDatabase(retryCount = 0) {
     });
 
     await dbClient.connect();
-    await dbClient.query("SET password_encryption = 'md5';");
+    await dbClient.query("SET password_encryption = 'scram-sha-256';");
     // Ensure PgBouncer (md5 auth) can connect by storing md5 hashes for app users
-    await dbClient.query("SET password_encryption = 'md5';");
+    await dbClient.query("SET password_encryption = 'scram-sha-256';");
 
     // Note: The postgres superuser password is already set via POSTGRES_PASSWORD_FILE during container initialization.
     // We do NOT re-set it here to avoid authentication issues with concurrent connections.
