@@ -61,7 +61,7 @@ WORKDIR /app/shared
 RUN npm run build
 
 # Increase Node.js memory limit for the build process
-ENV NODE_OPTIONS="--max-old-space-size=8192"
+ENV NODE_OPTIONS="--max-old-space-size=4096"
 
 WORKDIR /app/server
 
