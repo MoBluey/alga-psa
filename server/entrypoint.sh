@@ -399,11 +399,9 @@ main() {
     # Fix permissions before migrations
     fix_permissions
 
-    # Run database migrations
-    if ! run_migrations; then
-        log "Critical Error: Database migrations failed. Aborting startup."
-        exit 1
-    fi
+    # Migrations are handled by init-db sidecar
+    # We validatd dependencies above, so we assume schema is ready.
+
 
     # Start the application
     start_app
