@@ -68,11 +68,24 @@ check_seeds_status() {
         PG_PASSWORD="${DB_PASSWORD_ADMIN}"
     fi
 
-    has_seeds=$(PGPASSWORD="${PG_PASSWORD}" psql -h ${PG_ADMIN_HOST} -p ${PG_ADMIN_PORT} -U postgres -d ${DB_NAME_SERVER:-server} -tAc "SELECT EXISTS (SELECT 1 FROM users LIMIT 1);" 2>/dev/null)
-    if [ "$has_seeds" = "t" ]; then
-        return 0  # Seeds have been run
+    log "Checking seed status on ${PG_ADMIN_HOST}:${PG_ADMIN_PORT}..."
+    
+    # Capture both output and exit status. Don't silence errors blindly.
+    if has_seeds=$(PGPASSWORD="${PG_PASSWORD}" psql -h ${PG_ADMIN_HOST} -p ${PG_ADMIN_PORT} -U postgres -d ${DB_NAME_SERVER:-server} -tAc "SELECT EXISTS (SELECT 1 FROM users LIMIT 1);" 2>&1); then
+        if [ "$has_seeds" = "t" ]; then
+            log "Seed check positive (users found)."
+            return 0  # Seeds have been run
+        else
+            log "Seed check negative (no users found)."
+            return 1  # Seeds haven't been run
+        fi
     else
-        return 1  # Seeds haven't been run
+        log "WARNING: Seed check failed with error: $has_seeds"
+        # If the check fails (e.g. DB doesn't exist yet, or connection error), assume we need to run seeds (or that init will handle the error)
+        # But if DB doesn't exist, we SHOULD return 1 so seeds run (after DB creation).
+        # Actually, check_seeds_status is called AFTER create_database.js, so DB should exist.
+        # If it fails, strictly we should probably fail? But let's return 1 to attempt seeding which might print better errors.
+        return 1
     fi
 }
 
