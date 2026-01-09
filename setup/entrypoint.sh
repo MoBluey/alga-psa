@@ -35,7 +35,10 @@ wait_for_postgres() {
         export DB_HOST_ADMIN=$PG_ADMIN_HOST
         export DB_PORT_ADMIN=$PG_ADMIN_PORT
     fi
-    local PG_PASSWORD=$(cat /run/secrets/postgres_password | tr -d '[:space:]')
+    local PG_PASSWORD=$(cat /run/secrets/postgres_password 2>/dev/null | tr -d '[:space:]')
+    if [ -z "$PG_PASSWORD" ]; then
+        PG_PASSWORD="${DB_PASSWORD_ADMIN}"
+    fi
     set +e  # Temporarily disable exit on error for the until loop
     until PGPASSWORD="${PG_PASSWORD}" psql -h ${PG_ADMIN_HOST} -p ${PG_ADMIN_PORT} -U postgres -c '\q' 2>/dev/null; do
         # Try direct Postgres as a smart fallback if PgBouncer is the target and not responding
